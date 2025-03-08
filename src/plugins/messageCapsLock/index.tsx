@@ -11,19 +11,12 @@
  * create a pr or fork it or something idk do what you do
 */
 
+import { addMessagePreSendListener, removeMessagePreSendListener } from "@api/MessageEvents";
 import { Devs } from "@utils/constants";
 import definePlugin from "@utils/types";
+import { DraftStore, FluxDispatcher, SelectedChannelStore } from "@webpack/common";
 
-export default definePlugin({
-    name: "MessageCapsLock",
-    description: "Use caps lock to switch selected text between uppercase and lowercase",
-    authors: [Devs.Noro],
-    start() {
-        document.addEventListener("keydown", onKeyDown);
-    }
-});
-
-function onKeyDown(e: KeyboardEvent) {
+async function onKeyDown(e: KeyboardEvent) {
     if (e.key === "CapsLock") {
         // get current caps lock state
         const caps = e.getModifierState && e.getModifierState("CapsLock");
@@ -38,11 +31,44 @@ function onKeyDown(e: KeyboardEvent) {
         const element = document.querySelectorAll("div[contenteditable=\"true\"] span").values().filter(element => text && element.textContent?.includes(text)).toArray().at(0);
         if (!element) return;
 
+        const channelId = SelectedChannelStore.getChannelId();
+        const currentDraft = DraftStore.getDraft(SelectedChannelStore.getChannelId(), 0);
+        if (!currentDraft || !currentDraft.includes(text)) return;
+
+        let newDraft: string;
         if (caps) {
             selection.focusNode.textContent = selection.focusNode.textContent?.replace(text, text.toUpperCase());
+            newDraft = currentDraft.replace(text, text.toUpperCase());
         } else {
             selection.focusNode.textContent = selection.focusNode.textContent?.replace(text, text.toLowerCase());
+            newDraft = currentDraft.replace(text, text.toLowerCase());
         }
+
+        return await FluxDispatcher.dispatch({
+            type: "DRAFT_CHANGE", channelId, draft: newDraft, draftType: 0
+        });
     }
-    return;
 }
+
+export default definePlugin({
+    name: "MessageCapsLock",
+    description: "Use caps lock to switch selected text between uppercase and lowercase",
+    authors: [Devs.Noro],
+    dependencies: ["MessageEventsAPI"],
+
+    start() {
+        this.preSend = addMessagePreSendListener((channelId, messageObj) => {
+            const draft = DraftStore.getDraft(channelId, 0);
+            console.log(draft);
+            messageObj.content = draft;
+            return { cancel: false };
+        });
+
+        return document.addEventListener("keydown", onKeyDown);
+    },
+
+    stop() {
+        removeMessagePreSendListener(this.preSend);
+        return document.removeEventListener("keydown", onKeyDown);
+    }
+});
