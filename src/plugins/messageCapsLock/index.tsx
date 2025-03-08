@@ -59,7 +59,6 @@ export default definePlugin({
     start() {
         this.preSend = addMessagePreSendListener((channelId, messageObj) => {
             const draft = DraftStore.getDraft(channelId, 0);
-            console.log(draft);
             messageObj.content = draft;
             return { cancel: false };
         });
