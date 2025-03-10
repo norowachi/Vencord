@@ -59,8 +59,8 @@ export default definePlugin({
     start() {
         this.preSend = addMessagePreSendListener((channelId, messageObj) => {
             const draft = DraftStore.getDraft(channelId, 0);
-            messageObj.content = draft;
-            return { cancel: false };
+            if (draft.length > 0) messageObj.content = draft;
+            return;
         });
 
         return document.addEventListener("keydown", onKeyDown);
