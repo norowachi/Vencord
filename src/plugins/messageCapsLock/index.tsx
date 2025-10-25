@@ -11,54 +11,91 @@
  * create a pr or fork it or something idk do what you do
 */
 
+import "./styles.css";
+
 import { addMessagePreSendListener, removeMessagePreSendListener } from "@api/MessageEvents";
 import { Devs } from "@utils/constants";
 import definePlugin from "@utils/types";
-import { DraftStore, FluxDispatcher, SelectedChannelStore } from "@webpack/common";
+import { DraftStore, DraftType, FluxDispatcher, SelectedChannelStore } from "@webpack/common";
+
+const getDraft = (channelId: string) => DraftStore.getDraft(channelId, DraftType.ChannelMessage);
+
+function WrapSelection(tagName: string, className: string) {
+    const element = document.createElement(tagName);
+    element.classList.add(className);
+    const select = document.getSelection();
+    if (select?.rangeCount) {
+        const range = select.getRangeAt(0).cloneRange();
+        range.surroundContents(element);
+        select.removeAllRanges();
+        select.addRange(range);
+    }
+    return element;
+}
 
 async function onKeyDown(e: KeyboardEvent) {
-    if (e.key === "CapsLock") {
+    if (e.ctrlKey && e.key === "CapsLock") {
         // get current caps lock state
-        const caps = e.getModifierState && e.getModifierState("CapsLock");
+        const caps = e.getModifierState && e.getModifierState(e.key);
 
-        // get selected text
-        const selection = window.getSelection();
-        const text = selection?.toString();
-        // existance checks
-        if (!selection || !text || !selection?.focusNode?.textContent) return;
-
-        // find div with contenteditable="true" that contains the selected text
-        const element = document.querySelectorAll("div[contenteditable=\"true\"] span").values().filter(element => text && element.textContent?.includes(text)).toArray().at(0);
-        if (!element) return;
+        const element = document.activeElement as HTMLDivElement;
+        if (!element || !element.textContent) return;
 
         const channelId = SelectedChannelStore.getChannelId();
         const currentDraft = DraftStore.getDraft(SelectedChannelStore.getChannelId(), 0);
-        if (!currentDraft || !currentDraft.includes(text)) return;
+
 
         let newDraft: string;
+        // TODO: fix having to change the entire text box instead of just the current text
         if (caps) {
-            selection.focusNode.textContent = selection.focusNode.textContent?.replace(text, text.toUpperCase());
-            newDraft = currentDraft.replace(text, text.toUpperCase());
+            element.style.textTransform = "lowercase";
+            newDraft = currentDraft.toLowerCase();
         } else {
-            selection.focusNode.textContent = selection.focusNode.textContent?.replace(text, text.toLowerCase());
-            newDraft = currentDraft.replace(text, text.toLowerCase());
+            element.style.textTransform = "uppercase";
+            newDraft = currentDraft.toUpperCase();
         }
 
         return await FluxDispatcher.dispatch({
             type: "DRAFT_CHANGE", channelId, draft: newDraft, draftType: 0
         });
     }
+    // TODO: use just capslock for selection toggling
+    // else if (!e.ctrlKey && e.key === "CapsLock") {
+    //     // get current caps lock state
+    //     const caps = e.getModifierState && e.getModifierState(e.key);
+
+    //     const element = document.activeElement as HTMLDivElement;
+    //     if (!element || !element.textContent) return;
+
+    //     const channelId = SelectedChannelStore.getChannelId();
+    //     const currentDraft = DraftStore.getDraft(SelectedChannelStore.getChannelId(), 0);
+
+
+    //     let newDraft: string;
+    //     if (caps) {
+    //         const parent = WrapSelection("span", "msg-capslock-lower");
+    //         newDraft = currentDraft.replace(parent.innerText, s => s.toLowerCase());
+    //     } else {
+    //         const parent = WrapSelection("span", "msg-capslock-upper");
+    //         newDraft = currentDraft.replace(parent.innerText, s => s.toUpperCase());
+    //     }
+
+    //     return await FluxDispatcher.dispatch({
+    //         type: "DRAFT_CHANGE", channelId, draft: newDraft, draftType: 0
+
+    //     });
+    // }
 }
 
 export default definePlugin({
     name: "MessageCapsLock",
-    description: "Use caps lock to switch selected text between uppercase and lowercase",
+    description: "Use CTRL+CapsLock to switch text between uppercase and lowercase",
     authors: [Devs.Noro],
     dependencies: ["MessageEventsAPI"],
 
     start() {
         this.preSend = addMessagePreSendListener((channelId, messageObj) => {
-            const draft = DraftStore.getDraft(channelId, 0);
+            const draft = getDraft(channelId);
             if (draft.length > 0 && draft.toLowerCase() === messageObj.content.toLowerCase()) messageObj.content = draft;
             return;
         });
